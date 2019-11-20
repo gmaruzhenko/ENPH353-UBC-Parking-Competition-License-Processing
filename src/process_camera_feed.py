@@ -41,6 +41,7 @@ class image_converter:
         self.image_sub = rospy.Subscriber(
             "/R1/pi_camera/image_raw", Image, self.callback)
         self.model = self.loadmodel()
+        self.graph = False
 
     def callback(self, data):
         try:
@@ -87,13 +88,15 @@ class image_converter:
         json_file.close()
         loaded_model = model_from_json(loaded_model_json)
         loaded_model.load_weights("/home/tyler/353_ws/src/license_process/src/model.h5")
+        graph = tf.get_default_graph()
         loaded_model._make_predict_function()
 
-        print (loaded_model.summary())
+        # print (loaded_model.summary())
 
         loaded_model.compile(optimizer='adam',
               loss='sparse_categorical_crossentropy',
               metrics=['accuracy'])
+        # loaded_model._make_predict_function()
 
         return loaded_model
 
@@ -120,21 +123,36 @@ class image_converter:
             return newimg
 
         im1 = feature_image(plateimg,plate1)
-        im2 = feature_image(plateimg,plate2)
-        im3 = feature_image(plateimg,plate3)
-        im4 = feature_image(plateimg,plate4)
-        im5 = feature_image(plateimg,location)
-        
-        print (im1.shape)
+        # im2 = feature_image(plateimg,plate2)
+        # im3 = feature_image(plateimg,plate3)
+        # im4 = feature_image(plateimg,plate4)
+        # im5 = feature_image(plateimg,location)
 
-        p1 = self.model.predict(im1)
-        p2 = self.model.predict(im2)
-        p3 = self.model.predict(im3)
-        p4 = self.model.predict(im4)
-        p5 = self.model.predict(im5)
+        # print (im1.shape)
+        json_file = open('/home/tyler/353_ws/src/license_process/src/model.json', 'r')
+        loaded_model_json = json_file.read()
+        json_file.close()
+        loaded_model = model_from_json(loaded_model_json)
+        loaded_model.load_weights("/home/tyler/353_ws/src/license_process/src/model.h5")
+        graph = tf.get_default_graph()
+        loaded_model._make_predict_function()
 
-        prediction = str(p1) + str(p2) + str(p3) + str(p4) + str(p5)
-        print(prediction)
+        # print (loaded_model.summary())
+
+        loaded_model.compile(optimizer='adam',
+              loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
+        # graph = tf.get_default_graph()
+        # with graph.as_default():
+        with graph.as_default():
+            p1 = loaded_model.predict(im1)
+        # p2 = self.model.predict(im2)
+        # p3 = self.model.predict(im3)
+        # p4 = self.model.predict(im4)
+        # p5 = self.model.predict(im5)
+
+            prediction = str(p1) # + str(p2) + str(p3) + str(p4) + str(p5)
+            print(prediction)
 
 def trim_plate(img, (x,y,h,w)):
     res_x = 300
