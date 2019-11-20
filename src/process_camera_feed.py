@@ -15,6 +15,8 @@ from std_msgs.msg import Int16, String
 
 import tensorflow as tf
 from tensorflow import keras
+# print (keras.version)
+# print (tf.version())
 # # from keras.models import Sequential
 # # from keras.layers import Dense
 # # from keras.models import model_from_json
@@ -50,9 +52,9 @@ class image_converter:
 
         if (x != 0 and y !=0):
             plateimg = trim_plate(cv_image,(x,y,h,w))
-            plt.figure()
-            plt.imshow(plateimg) 
-            plt.show()
+            # plt.figure()
+            # plt.imshow(plateimg) 
+            # plt.show()
             self.predictplate(plateimg)
 
         image_message = self.bridge.cv2_to_imgmsg(output, encoding="bgr8") #bgr8 or 8UC1
@@ -80,12 +82,18 @@ class image_converter:
         # model.load_weights("model.h5")
         # model._make_predict_function()
 
-        json_file = open('model.json', 'r')
+        json_file = open('/home/tyler/353_ws/src/license_process/src/model.json', 'r')
         loaded_model_json = json_file.read()
         json_file.close()
         loaded_model = model_from_json(loaded_model_json)
-        loaded_model.load_weights("model.h5")
+        loaded_model.load_weights("/home/tyler/353_ws/src/license_process/src/model.h5")
         loaded_model._make_predict_function()
+
+        print (loaded_model.summary())
+
+        loaded_model.compile(optimizer='adam',
+              loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
 
         return loaded_model
 
@@ -107,8 +115,8 @@ class image_converter:
             Xacross = slice(Xpoint,Xpoint+pipe_x*scale, scale)
 
             newimg = img[Ydown,Xacross]
-            np.expand_dims(newimg, axis=0)
-            np.expand_dims(newimg, axis=4)
+            newimg = np.expand_dims(newimg, axis=0)
+            newimg = np.expand_dims(newimg, axis=4)
             return newimg
 
         im1 = feature_image(plateimg,plate1)
@@ -116,6 +124,8 @@ class image_converter:
         im3 = feature_image(plateimg,plate3)
         im4 = feature_image(plateimg,plate4)
         im5 = feature_image(plateimg,location)
+        
+        print (im1.shape)
 
         p1 = self.model.predict(im1)
         p2 = self.model.predict(im2)
