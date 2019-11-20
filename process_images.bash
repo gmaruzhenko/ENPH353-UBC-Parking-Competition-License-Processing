@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd /launch
+cd launch
 roslaunch license_process start.launch
 
 
