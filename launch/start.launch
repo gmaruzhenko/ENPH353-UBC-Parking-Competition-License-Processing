@@ -1,0 +1,5 @@
+
+<launch>
+    <node name="my_image_processing" type="image_classifier.py" pkg="license_process" output="screen"/>
+    <!--<node name="license_plate_reader" pkg="image_classifier.py"/>-->
+</launch>
