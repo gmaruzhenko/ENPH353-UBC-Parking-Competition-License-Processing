@@ -26,12 +26,17 @@ from tensorflow.keras.models import model_from_json
 from matplotlib import pyplot as plt
 import os
 
+logging = True
+
 expected_error_max = 100
 
 Kernel_size = 15
 low_threshold = 75
 high_threshold = 110
 bwThresh = 100
+
+pipe_x = 80
+pipe_y = 80
 
 class image_converter:
 
@@ -40,7 +45,7 @@ class image_converter:
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber(
             "/R1/pi_camera/image_raw", Image, self.callback)
-        self.model = self.loadmodel()
+        # self.model = self.loadmodel()
         self.graph = False
 
     def callback(self, data):
@@ -52,112 +57,100 @@ class image_converter:
         output, (x,y,h,w) = colormask_contour(cv_image)
 
         if (x != 0 and y !=0):
-            plateimg = trim_plate(cv_image,(x,y,h,w))
+            plateimg = trim_plate(cv_image, x,y,h,w)
             # plt.figure()
             # plt.imshow(plateimg) 
             # plt.show()
-            self.predictplate(plateimg)
+            predictplate(plateimg)
 
         image_message = self.bridge.cv2_to_imgmsg(output, encoding="bgr8") #bgr8 or 8UC1
         self.image_out.publish( image_message )
     
-    def loadmodel(self):
-        # model = keras.models.Sequential()
-        # model.add(keras.layers.Conv2D(32, (5, 5), activation='relu', input_shape=(80, 80, 1)))
-        # model.add(keras.layers.MaxPooling2D((2, 2)))
+    # def loadmodel(self):
+    #     json_file = open('/home/tyler/353_ws/src/license_process/src/model.json', 'r')
+    #     loaded_model_json = json_file.read()
+    #     json_file.close()
+    #     loaded_model = model_from_json(loaded_model_json)
+    #     loaded_model.load_weights("/home/tyler/353_ws/src/license_process/src/model.h5")
+    #     graph = tf.get_default_graph()
+    #     loaded_model._make_predict_function()
 
-        # model.add(keras.layers.Conv2D(32, (3, 3), activation='relu'))
-        # model.add(keras.layers.MaxPooling2D((2, 2)))
+    #     # print (loaded_model.summary())
 
-        # model.add(keras.layers.Conv2D(32, (3, 3), activation='relu'))
-        # model.add(keras.layers.MaxPooling2D((2, 2)))
+    #     loaded_model.compile(optimizer='adam',
+    #           loss='sparse_categorical_crossentropy',
+    #           metrics=['accuracy'])
 
-        # model.add(keras.layers.Conv2D(32, (3, 3), activation='relu'))
-        # model.add(keras.layers.MaxPooling2D((2, 2)))
+    #     return loaded_model
 
-        # model.add(keras.layers.Conv2D(32, (3, 3), activation='relu'))
+def revto(tuple, scale=1):
+    return (tuple[1] + pipe_x*scale, tuple[0] + pipe_y*scale)
 
-        # model.add(keras.layers.Flatten())
-        # model.add(keras.layers.Dense(60, activation='relu'))
-        # model.add(keras.layers.Dense(36, activation='softmax'))
-        # model.load_weights("model.h5")
-        # model._make_predict_function()
+def predictplate(plateimg):
+    print(plateimg.shape)
+    # Must not exceet 450y by 300x, pipexy currently 40 -> 80
+    plate1 = (200,0)
+    plate2 = (200,40)
+    plate3 = (200,140)
+    plate4 = (200,220)
+    location = (180,180)
 
-        json_file = open('/home/tyler/353_ws/src/license_process/src/model.json', 'r')
-        loaded_model_json = json_file.read()
-        json_file.close()
-        loaded_model = model_from_json(loaded_model_json)
-        loaded_model.load_weights("/home/tyler/353_ws/src/license_process/src/model.h5")
-        graph = tf.get_default_graph()
-        loaded_model._make_predict_function()
+    if logging:
+        show = cv2.rectangle(plateimg.copy(), revto(plate1), revto(plate1,2), (0,255,0), 2)
+        show = cv2.rectangle(show, revto(plate2), revto(plate2,2), (0,255,0), 2)
+        show = cv2.rectangle(show, revto(plate3), revto(plate3,2), (0,255,0), 2)
+        show = cv2.rectangle(show, revto(plate4), revto(plate4,2), (0,255,0), 2)
+        show = cv2.rectangle(show, revto(location), revto(location,2), (0,255,0), 2)
 
-        # print (loaded_model.summary())
+    im1 = feature_image(plateimg,plate1,2) # crops
+    im2 = feature_image(plateimg,plate2,2)
+    im3 = feature_image(plateimg,plate3,2)
+    im4 = feature_image(plateimg,plate4,2)
+    im5 = feature_image(plateimg,location,3)
 
-        loaded_model.compile(optimizer='adam',
-              loss='sparse_categorical_crossentropy',
-              metrics=['accuracy'])
-        # loaded_model._make_predict_function()
 
-        return loaded_model
 
-    def predictplate(self,plateimg):
-        pipe_x = 80
-        pipe_y = 80
+    # Are now loading the model each time to avoid the multithreading bug
+    json_file = open('/home/tyler/353_ws/src/license_process/src/model.json', 'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    loaded_model = model_from_json(loaded_model_json)
+    loaded_model.load_weights("/home/tyler/353_ws/src/license_process/src/model.h5")
+    graph = tf.get_default_graph()
+    loaded_model._make_predict_function()
 
-        plate1 = (340,40)
-        plate2 = (340,90)
-        plate3 = (335,180)
-        plate4 = (335,240)
-        location = (180,180)
+    loaded_model.compile(optimizer='adam',
+            loss='sparse_categorical_crossentropy',
+            metrics=['accuracy'])
 
-        def feature_image(img, featureloc, scale=1):
-            Ypoint = featureloc[0]
-            Xpoint = featureloc[1]
+    with graph.as_default():
+        p1 = loaded_model.predict(im1)
+        p2 = loaded_model.predict(im2)
+        p3 = loaded_model.predict(im3)
+        p4 = loaded_model.predict(im4)
+        p5 = loaded_model.predict(im5)
 
-            Ydown   = slice(Ypoint,Ypoint+pipe_y*scale, scale)
-            Xacross = slice(Xpoint,Xpoint+pipe_x*scale, scale)
+        prediction = tochar(np.argmax(p1)) + tochar(np.argmax(p2)) + tochar(np.argmax(p3)) + tochar(np.argmax(p4)) + "_loc_" + str(np.argmax(p5))
 
-            newimg = img[Ydown,Xacross]
-            newimg = np.expand_dims(newimg, axis=0)
-            newimg = np.expand_dims(newimg, axis=4)
-            return newimg
+        if logging:
+            print("Plate Found: ", prediction)
+            cv2.imwrite('guesses/' + prediction + '.png', show)
 
-        im1 = feature_image(plateimg,plate1)
-        # im2 = feature_image(plateimg,plate2)
-        # im3 = feature_image(plateimg,plate3)
-        # im4 = feature_image(plateimg,plate4)
-        # im5 = feature_image(plateimg,location)
+def feature_image(img, featureloc, scale=1):
+    Ypoint = featureloc[0]
+    Xpoint = featureloc[1]
 
-        # print (im1.shape)
-        json_file = open('/home/tyler/353_ws/src/license_process/src/model.json', 'r')
-        loaded_model_json = json_file.read()
-        json_file.close()
-        loaded_model = model_from_json(loaded_model_json)
-        loaded_model.load_weights("/home/tyler/353_ws/src/license_process/src/model.h5")
-        graph = tf.get_default_graph()
-        loaded_model._make_predict_function()
+    Ydown   = slice(Ypoint,Ypoint+pipe_y*scale, scale)
+    Xacross = slice(Xpoint,Xpoint+pipe_x*scale, scale)
 
-        # print (loaded_model.summary())
+    newimg = img[Ydown,Xacross]
+    newimg = np.expand_dims(newimg, axis=0)
+    newimg = np.expand_dims(newimg, axis=4)
+    return newimg
 
-        loaded_model.compile(optimizer='adam',
-              loss='sparse_categorical_crossentropy',
-              metrics=['accuracy'])
-        # graph = tf.get_default_graph()
-        # with graph.as_default():
-        with graph.as_default():
-            p1 = loaded_model.predict(im1)
-        # p2 = self.model.predict(im2)
-        # p3 = self.model.predict(im3)
-        # p4 = self.model.predict(im4)
-        # p5 = self.model.predict(im5)
-
-            prediction = str(p1) # + str(p2) + str(p3) + str(p4) + str(p5)
-            print(prediction)
-
-def trim_plate(img, (x,y,h,w)):
+def trim_plate(img, x,y,h,w):
     res_x = 300
     res_y = int(res_x*1.5)
-    border = 50
 
     # pts1 = np.float32([     Need this only for the non rectangle images 
     #                 [x,y], 
@@ -170,10 +163,9 @@ def trim_plate(img, (x,y,h,w)):
     # pts2 += int(border/2)
     
     # M = cv2.getPerspectiveTransform(pts1, pts2)
-    
     # dst = cv2.warpPerspective(img, M, (res_x+border,res_y+border))
-
-    crop = img[y:y+h,x:x+w]
+    crop = img[ y:y+h, x:x+w ]
+    # crop = img[ (y-border):(y+h+border), (x-border):(x+w+border) ]
     scale = cv2.resize(crop,(res_x,res_y))
     im_gray = cv2.cvtColor(scale, cv2.COLOR_BGR2GRAY) # wondering if some contrast would be nice here
 
