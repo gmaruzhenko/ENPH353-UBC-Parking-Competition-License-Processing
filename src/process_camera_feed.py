@@ -57,12 +57,11 @@ class image_converter:
         self.image_out.publish( image_message )
 
 def predictplate(plateimg):
-    # Must not exceet 450y by 300x, pipexy currently 80
-    plate1 = (200,0)
-    plate2 = (200,40)
-    plate3 = (200,140)
-    plate4 = (200,220)
-    location = (180,140)
+    plate1 = (340,40)
+    plate2 = (340,90)
+    plate3 = (335,180)
+    plate4 = (335,240)
+    location = (180,180)
 
     im1 = feature_image(plateimg,plate1,1) # cropping
     im2 = feature_image(plateimg,plate2,1)
@@ -71,6 +70,14 @@ def predictplate(plateimg):
     im5 = feature_image(plateimg,location,2)
 
     # Are now loading the model each time to avoid the multithreading bug
+    # This model was made with the simulated data. Will it work? Maybe
+    # If it doesn't work, here are the options we have:
+    # 1. Remake the fake data ( https://github.com/TyKeeling/ENPH353-competition/tree/master/enph353/enph353_gazebo/data_gen )
+    # and then reimport to model. A subsection here is make MORE DATA but we're already training with 3610 images
+    # 2. change the transformed image scaling and/or the window size (higher scaling resolution or larger CNN window)
+    # This would mean changing the x_pipe and y_pipe in this file, as well as plate locations of course
+    # 3. trial and error (find paper exmaples?) 
+    # change model weights and biases, retrain, and import to real model to test. 
     json_file = open('/home/tyler/353_ws/src/license_process/src/model.json', 'r')
     loaded_model_json = json_file.read()
     json_file.close()
@@ -100,15 +107,20 @@ def predictplate(plateimg):
 def feature_image(img, featureloc, scale=1, pipe_x=80, pipe_y=80):
     
     Ypoint = featureloc[0]
+    if Ypoint + pipe_y*scale > im_h:
+        raise Exception('section should not exceed im_h. The y endpoint was: {}'.format(Ypoint))
+
     Xpoint = featureloc[1]
+    if Xpoint + pipe_x*scale > im_w:
+        raise Exception('section should not exceed im_w. The x endpoint was: {}'.format(Xpoint))
 
     Ydown   = slice(Ypoint,Ypoint+pipe_y*scale, scale)
     Xacross = slice(Xpoint,Xpoint+pipe_x*scale, scale)
 
-    pt1 = (Xpoint, Ypoint)
-    pt2 = (Xpoint + pipe_x*scale, Ypoint + pipe_x*scale)
-
-    # cv2.rectangle(img,pt1,pt2,(0,255,0),1)
+    if logging:
+        pt1 = (Xpoint, Ypoint)
+        pt2 = (Xpoint + pipe_x*scale, Ypoint + pipe_x*scale)
+        cv2.rectangle(img,pt1,pt2,(0,255,0),1)
 
     newimg = img[Ydown,Xacross]
     newimg = np.expand_dims(newimg, axis=0)
@@ -131,11 +143,8 @@ def tochar(inty):
 
 
 
-
-
-
 def trim_plate(img, points):
-    border = 0
+    border = 50
     res_x = 300
     res_y = int(res_x*1.5)
     plate_start = int(res_y*0.730)
@@ -151,7 +160,7 @@ def trim_plate(img, points):
                         mindist(pts0, im_w, im_h) ])
     
 
-    print(pts1)
+    # print(pts1)
 
     for i in range(4): # this experiment shows that points are found but placed in no order
         cv2.circle(img, (int(pts1[i][0]),int(pts1[i][1])), 2, (255,255,255), (5*i+3))
@@ -163,7 +172,7 @@ def trim_plate(img, points):
     M = cv2.getPerspectiveTransform(pts1, pts2)
     dst = cv2.warpPerspective(img, M, (res_x+border,res_y+border))
 
-    im_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # wondering if some contrast would be nice here
+    im_gray = cv2.cvtColor(dst, cv2.COLOR_BGR2GRAY) # wondering if some contrast would be nice here
     return im_gray
 
 
@@ -207,8 +216,6 @@ def mindist(approx, x, y): #min of dist is min of dist^2
             i = j 
             mini = dist
 
-    print (approx[i])
-    print (mini)
     return approx[i]
 
 def notEdges(x, y, w, h, im_w=1280, im_h=720):
