@@ -28,18 +28,40 @@ import os
 
 logging = True 
 
-im_w = 1280
-im_h = 720
-
 class image_converter:
 
     def __init__(self):
+        # ROS Stuff
         self.image_out = rospy.Publisher("/R1/image_out", Image, queue_size=1)
+        self.plate_out = rospy.Publisher("/license_plate", String)
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber(
             "/R1/pi_camera/image_raw", Image, self.callback)
-        # self.model = self.loadmodel()
         self.graph = False
+
+        # IO Stuff
+        self.model = "/home/tyler/353_ws/src/license_process/src/model.json"
+        self.weights = "/home/tyler/353_ws/src/license_process/src/model.h5"
+        self.im_w = 1280
+        self.im_h = 720
+        self.teamnamepass = "GG_GoshaKee,passw0rd" # so secure lol hope I don't get hacked
+
+        # Image Parameter Stuff
+        self.plate1 = (340,40)
+        self.plate2 = (340,90)
+        self.plate3 = (335,180)
+        self.plate4 = (335,240)
+        self.location = (180,180)
+
+        self.pipe_x = 80
+        self.pipe_y = 80
+
+        self.border = 50
+        self.res_x = 300
+        self.res_y = int(self.res_x*1.5)
+        self.plate_start = int(self.res_y*0.730)
+
+
 
     def callback(self, data):
         try:
@@ -50,83 +72,109 @@ class image_converter:
         output, points = colormask_contour(cv_image)
 
         if points is not None:
-            plateimg = trim_plate(cv_image, points)
-            predictplate(plateimg)
+            plateimg = self.trim_plate(cv_image, points)
+            self.predictplate(plateimg)
 
-        image_message = self.bridge.cv2_to_imgmsg(output, encoding="bgr8") #bgr8 or 8UC1
-        self.image_out.publish( image_message )
+        # image_message = self.bridge.cv2_to_imgmsg(output, encoding="bgr8") #bgr8 or 8UC1
+        # self.image_out.publish( image_message )
 
-def predictplate(plateimg):
-    plate1 = (340,40)
-    plate2 = (340,90)
-    plate3 = (335,180)
-    plate4 = (335,240)
-    location = (180,180)
+    def predictplate(self, plateimg):
+        im1 = self.sub_image(plateimg,self.plate1,1) # cropping
+        im2 = self.sub_image(plateimg,self.plate2,1)
+        im3 = self.sub_image(plateimg,self.plate3,1)
+        im4 = self.sub_image(plateimg,self.plate4,1)
+        im5 = self.sub_image(plateimg,self.location,2)
 
-    im1 = feature_image(plateimg,plate1,1) # cropping
-    im2 = feature_image(plateimg,plate2,1)
-    im3 = feature_image(plateimg,plate3,1)
-    im4 = feature_image(plateimg,plate4,1)
-    im5 = feature_image(plateimg,location,2)
+        # Are now loading the model each time to avoid the multithreading bug
 
-    # Are now loading the model each time to avoid the multithreading bug
-    # This model was made with the simulated data. Will it work? Maybe
-    # If it doesn't work, here are the options we have:
-    # 1. Remake the fake data ( https://github.com/TyKeeling/ENPH353-competition/tree/master/enph353/enph353_gazebo/data_gen )
-    # and then reimport to model. A subsection here is make MORE DATA but we're already training with 3610 images
-    # 2. change the transformed image scaling and/or the window size (higher scaling resolution or larger CNN window)
-    # This would mean changing the x_pipe and y_pipe in this file, as well as plate locations of course
-    # 3. trial and error (find paper exmaples?) 
-    # change model weights and biases, retrain, and import to real model to test. 
-    json_file = open('/home/tyler/353_ws/src/license_process/src/model.json', 'r')
-    loaded_model_json = json_file.read()
-    json_file.close()
-    loaded_model = model_from_json(loaded_model_json)
-    loaded_model.load_weights("/home/tyler/353_ws/src/license_process/src/model.h5")
-    graph = tf.get_default_graph()
-    loaded_model._make_predict_function()
+        # This model was made with the simulated data. Will it work? Maybe
+        # If it doesn't work, here are the options we have:
+        # 1. Remake the fake data ( https://github.com/TyKeeling/ENPH353-competition/tree/master/enph353/enph353_gazebo/data_gen )
+        # and then reimport to model. A subsection here is make MORE DATA but we're already training with 3610 images
+        # 2. change the transformed image scaling and/or the window size (higher scaling resolution or larger CNN window)
+        # This would mean changing the x_pipe and y_pipe in this file, as well as plate locations of course
+        # 3. trial and error (find paper exmaples?) 
+        # change model weights and biases, retrain, and import to real model to test. 
+        json_file = open(self.model, 'r')
+        loaded_model_json = json_file.read()
+        json_file.close()
+        loaded_model = model_from_json(loaded_model_json)
+        loaded_model.load_weights(self.weights)
+        graph = tf.get_default_graph()
+        loaded_model._make_predict_function()
 
-    loaded_model.compile(optimizer='adam',
-            loss='sparse_categorical_crossentropy',
-            metrics=['accuracy'])
+        loaded_model.compile(optimizer='adam',
+                loss='sparse_categorical_crossentropy',
+                metrics=['accuracy'])
 
-    with graph.as_default():
-        p1 = loaded_model.predict(im1)
-        p2 = loaded_model.predict(im2)
-        p3 = loaded_model.predict(im3)
-        p4 = loaded_model.predict(im4)
-        p5 = loaded_model.predict(im5)
-        prediction = tochar(np.argmax(p1)) + tochar(np.argmax(p2)) + tochar(np.argmax(p3)) + tochar(np.argmax(p4)) + "_loc_" + str(np.argmax(p5))
+        with graph.as_default():
+            p1 = loaded_model.predict(im1)
+            p2 = loaded_model.predict(im2)
+            p3 = loaded_model.predict(im3)
+            p4 = loaded_model.predict(im4)
+            p5 = loaded_model.predict(im5)
+            prediction = tochar(np.argmax(p1)) + tochar(np.argmax(p2)) + tochar(np.argmax(p3)) + tochar(np.argmax(p4))
+            loc = str(np.argmax(p5))
+
+            # TOOD if confidence > 90%: 
+            if logging:
+                print("Plate Found: ", prediction)
+                cv2.imwrite('guesses/' + prediction + '_' + loc + '_ ' +
+                    str(rospy.get_rostime()) + '.png', plateimg)
+
+            string = self.teamnamepass + "," + loc + "," + prediction
+            self.plate_out.publish(string)
+
+    # function that returns rectangular snippet of an image based on top xy coordinate and 
+    def sub_image(self, img, featureloc, scale=1):
+        Ypoint = featureloc[0]
+        if Ypoint + self.pipe_y*scale > self.im_h:
+            raise Exception('section should not exceed im_h. The y endpoint was: {}'.format(Ypoint))
+
+        Xpoint = featureloc[1]
+        if Xpoint + self.pipe_x*scale > self.im_w:
+            raise Exception('section should not exceed im_w. The x endpoint was: {}'.format(Xpoint))
+
+        Ydown   = slice(Ypoint,Ypoint+self.pipe_y*scale, scale)
+        Xacross = slice(Xpoint,Xpoint+self.pipe_x*scale, scale)
 
         if logging:
-            print("Plate Found: ", prediction)
-            cv2.imwrite('guesses/' + prediction + '_' + str(rospy.get_rostime()) + '.png', plateimg)
+            pt1 = (Xpoint, Ypoint)
+            pt2 = (Xpoint + self.pipe_x*scale, Ypoint + self.pipe_x*scale)
+            cv2.rectangle(img,pt1,pt2,(0,255,0),1)
+
+        newimg = img[Ydown,Xacross]
+        newimg = np.expand_dims(newimg, axis=0)
+        newimg = np.expand_dims(newimg, axis=4)
+
+        return newimg
+
+    def trim_plate(self, img, points):
+        #This depends on how the plate is interpreted
+        pts0 = np.float32([np.squeeze(points[0]), np.squeeze(points[1]), 
+        np.squeeze(points[2]), np.squeeze(points[3])])
+
+        # order the points according to pts2
+        pts1 = np.float32([ mindist(pts0, 0, 0),
+                            mindist(pts0, self.im_w, 0),
+                            mindist(pts0, 0, self.im_h),
+                            mindist(pts0, self.im_w, self.im_h) ])
+
+        for i in range(4): # this experiment shows that points are found but placed in no order
+            cv2.circle(img, (int(pts1[i][0]),int(pts1[i][1])), 2, (255,255,255), (5*i+3))
+
+        pts2 = np.float32([[0,0], [self.res_x,0], [0,self.plate_start], [self.res_x,self.plate_start]])
+        pts2 += int(self.border/2)
+
+        M = cv2.getPerspectiveTransform(pts1, pts2)
+        dst = cv2.warpPerspective(img, M, (self.res_x+self.border,self.res_y+self.border))
+
+        im_gray = cv2.cvtColor(dst, cv2.COLOR_BGR2GRAY) # wondering if some contrast would be nice here
+        return im_gray
 
 
-# function that returns rectangular snippet of an image based on top xy coordinate and 
-def feature_image(img, featureloc, scale=1, pipe_x=80, pipe_y=80):
-    
-    Ypoint = featureloc[0]
-    if Ypoint + pipe_y*scale > im_h:
-        raise Exception('section should not exceed im_h. The y endpoint was: {}'.format(Ypoint))
 
-    Xpoint = featureloc[1]
-    if Xpoint + pipe_x*scale > im_w:
-        raise Exception('section should not exceed im_w. The x endpoint was: {}'.format(Xpoint))
-
-    Ydown   = slice(Ypoint,Ypoint+pipe_y*scale, scale)
-    Xacross = slice(Xpoint,Xpoint+pipe_x*scale, scale)
-
-    if logging:
-        pt1 = (Xpoint, Ypoint)
-        pt2 = (Xpoint + pipe_x*scale, Ypoint + pipe_x*scale)
-        cv2.rectangle(img,pt1,pt2,(0,255,0),1)
-
-    newimg = img[Ydown,Xacross]
-    newimg = np.expand_dims(newimg, axis=0)
-    newimg = np.expand_dims(newimg, axis=4)
-
-    return newimg
+# All the serfton objectless functions 
 
 def toint(char):
     if char.isalpha():
@@ -140,41 +188,6 @@ def tochar(inty):
         return str(inty)
     else:
         return chr(55+inty) 
-
-
-
-def trim_plate(img, points):
-    border = 50
-    res_x = 300
-    res_y = int(res_x*1.5)
-    plate_start = int(res_y*0.730)
-
-    #This depends on how the plate is interpreted
-    pts0 = np.float32([np.squeeze(points[0]), np.squeeze(points[1]), 
-    np.squeeze(points[2]), np.squeeze(points[3])])
-
-        # order the points according to pts2
-    pts1 = np.float32([ mindist(pts0, 0, 0),
-                        mindist(pts0, im_w, 0),
-                        mindist(pts0, 0, im_h),
-                        mindist(pts0, im_w, im_h) ])
-    
-
-    # print(pts1)
-
-    for i in range(4): # this experiment shows that points are found but placed in no order
-        cv2.circle(img, (int(pts1[i][0]),int(pts1[i][1])), 2, (255,255,255), (5*i+3))
-
-
-    pts2 = np.float32([[0,0], [res_x,0], [0,plate_start], [res_x,plate_start]])
-    pts2 += int(border/2)
-
-    M = cv2.getPerspectiveTransform(pts1, pts2)
-    dst = cv2.warpPerspective(img, M, (res_x+border,res_y+border))
-
-    im_gray = cv2.cvtColor(dst, cv2.COLOR_BGR2GRAY) # wondering if some contrast would be nice here
-    return im_gray
-
 
 def colormask_contour(img):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -201,7 +214,6 @@ def colormask_contour(img):
         approx = cv2.approxPolyDP(cnt,0.1*cv2.arcLength(cnt,True),True)
         if len(approx)==4:
             x,y,w,h = cv2.boundingRect(cnt)
-            # h = int(h*1.37)
             if w > 60 and h > 80 and notEdges(x,y,w,h):
                 return img, approx
 
