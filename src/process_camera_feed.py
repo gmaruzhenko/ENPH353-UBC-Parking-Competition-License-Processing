@@ -27,6 +27,7 @@ from matplotlib import pyplot as plt
 import os
 
 logging = True 
+drawing = True
 
 class image_converter:
 
@@ -138,7 +139,7 @@ class image_converter:
         Ydown   = slice(Ypoint,Ypoint+self.pipe_y*scale, scale)
         Xacross = slice(Xpoint,Xpoint+self.pipe_x*scale, scale)
 
-        if logging:
+        if drawing:
             pt1 = (Xpoint, Ypoint)
             pt2 = (Xpoint + self.pipe_x*scale, Ypoint + self.pipe_x*scale)
             cv2.rectangle(img,pt1,pt2,(0,255,0),1)
@@ -155,13 +156,13 @@ class image_converter:
         np.squeeze(points[2]), np.squeeze(points[3])])
 
         # order the points according to pts2
-        pts1 = np.float32([ mindist(pts0, 0, 0),
-                            mindist(pts0, self.im_w, 0),
-                            mindist(pts0, 0, self.im_h),
-                            mindist(pts0, self.im_w, self.im_h) ])
+        pts1 = np.float32([ closest_node( np.array([0, 0]), pts0),
+                            closest_node( np.array([self.im_w, 0]), pts0),
+                            closest_node( np.array([0, self.im_h]), pts0),
+                            closest_node( np.array([self.im_w, self.im_h]), pts0) ])
 
-        for i in range(4): # this experiment shows that points are found but placed in no order
-            cv2.circle(img, (int(pts1[i][0]),int(pts1[i][1])), 2, (255,255,255), (5*i+3))
+        # for i in range(4): # Order is proper!!! YESSSSS 
+        #     cv2.circle(img, (int(pts1[i][0]),int(pts1[i][1])), 2, (255,255,255), (5*i+3))
 
         pts2 = np.float32([[0,0], [self.res_x,0], [0,self.plate_start], [self.res_x,self.plate_start]])
         pts2 += int(self.border/2)
@@ -174,7 +175,7 @@ class image_converter:
 
 
 
-# All the serfton objectless functions 
+# All the undeserving serfton objectless functions 
 
 def toint(char):
     if char.isalpha():
@@ -219,16 +220,11 @@ def colormask_contour(img):
 
     return img, None
 
-def mindist(approx, x, y): #min of dist is min of dist^2
-    mini = 5000 # should be fine as image is 1280pix in largest dimension
-    i = 0
-    for j in range(approx.shape[0]):
-        dist = abs(x - approx[j][0]) + abs(y - approx[i][1]) # Assuming contours returns XY
-        if dist < mini:  
-            i = j 
-            mini = dist
-
-    return approx[i]
+# https://codereview.stackexchange.com/questions/28207/finding-the-closest-point-to-a-list-of-points
+def closest_node(node, nodes):
+    nodes = np.asarray(nodes)
+    dist_2 = np.sum((nodes - node)**2, axis=1)
+    return nodes[np.argmin(dist_2)]
 
 def notEdges(x, y, w, h, im_w=1280, im_h=720):
     if x <= 0:
