@@ -117,16 +117,15 @@ class image_converter:
         #     p5 = loaded_model.predict(im5)
         #     prediction = tochar(np.argmax(p1)) + tochar(np.argmax(p2)) + tochar(np.argmax(p3)) + tochar(np.argmax(p4))
         #     loc = str(np.argmax(p5))
-
             # TOOD if confidence > 90%: 
         prediction = "XX00"
         loc = "2"
         if logging:
-            if self.i % 4 == 0:
-                print("Plate Found: ", prediction)
-                cv2.imwrite('guesses/' + prediction + '_' + loc + '_ ' +
-                    str(rospy.get_rostime()) + '.png', plateimg)
-            self.i += 1
+            #if self.i % 1 == 0:
+                string = 'guesses/' + prediction + '_' + loc + '_ ' + str(rospy.get_rostime()) + '.png'
+                print("Plate Found: " + string)
+                cv2.imwrite(string, plateimg)
+            #self.i += 1
             # string = self.teamnamepass + "," + loc + "," + prediction
             # self.plate_out.publish(string)
 
