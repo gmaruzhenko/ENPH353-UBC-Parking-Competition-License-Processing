@@ -27,14 +27,14 @@ from matplotlib import pyplot as plt
 import os
 
 logging = True 
-drawing = True
+drawing = False
 
 class image_converter:
 
     def __init__(self):
         # ROS Stuff
         self.image_out = rospy.Publisher("/R1/image_out", Image, queue_size=1)
-        self.plate_out = rospy.Publisher("/license_plate", String)
+        self.plate_out = rospy.Publisher("/license_plate", String, queue_size=10)
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber(
             "/R1/pi_camera/image_raw", Image, self.callback)
@@ -60,9 +60,9 @@ class image_converter:
         self.border = 50
         self.res_x = 300
         self.res_y = int(self.res_x*1.5)
-        self.plate_start = int(self.res_y*0.730)
+        self.plate_start = int(self.res_y*0.730) # Far down enough to find the border
 
-
+        self.i = 0
 
     def callback(self, data):
         try:
@@ -76,8 +76,8 @@ class image_converter:
             plateimg = self.trim_plate(cv_image, points)
             self.predictplate(plateimg)
 
-        # image_message = self.bridge.cv2_to_imgmsg(output, encoding="bgr8") #bgr8 or 8UC1
-        # self.image_out.publish( image_message )
+        image_message = self.bridge.cv2_to_imgmsg(output, encoding="bgr8") #bgr8 or 8UC1
+        self.image_out.publish( image_message )
 
     def predictplate(self, plateimg):
         im1 = self.sub_image(plateimg,self.plate1,1) # cropping
@@ -96,35 +96,39 @@ class image_converter:
         # This would mean changing the x_pipe and y_pipe in this file, as well as plate locations of course
         # 3. trial and error (find paper exmaples?) 
         # change model weights and biases, retrain, and import to real model to test. 
-        json_file = open(self.model, 'r')
-        loaded_model_json = json_file.read()
-        json_file.close()
-        loaded_model = model_from_json(loaded_model_json)
-        loaded_model.load_weights(self.weights)
-        graph = tf.get_default_graph()
-        loaded_model._make_predict_function()
 
-        loaded_model.compile(optimizer='adam',
-                loss='sparse_categorical_crossentropy',
-                metrics=['accuracy'])
+        # json_file = open(self.model, 'r')
+        # loaded_model_json = json_file.read()
+        # json_file.close()
+        # loaded_model = model_from_json(loaded_model_json)
+        # loaded_model.load_weights(self.weights)
+        # graph = tf.get_default_graph()
+        # loaded_model._make_predict_function()
 
-        with graph.as_default():
-            p1 = loaded_model.predict(im1)
-            p2 = loaded_model.predict(im2)
-            p3 = loaded_model.predict(im3)
-            p4 = loaded_model.predict(im4)
-            p5 = loaded_model.predict(im5)
-            prediction = tochar(np.argmax(p1)) + tochar(np.argmax(p2)) + tochar(np.argmax(p3)) + tochar(np.argmax(p4))
-            loc = str(np.argmax(p5))
+        # loaded_model.compile(optimizer='adam',
+        #         loss='sparse_categorical_crossentropy',
+        #         metrics=['accuracy'])
+
+        # with graph.as_default():
+        #     p1 = loaded_model.predict(im1)
+        #     p2 = loaded_model.predict(im2)
+        #     p3 = loaded_model.predict(im3)
+        #     p4 = loaded_model.predict(im4)
+        #     p5 = loaded_model.predict(im5)
+        #     prediction = tochar(np.argmax(p1)) + tochar(np.argmax(p2)) + tochar(np.argmax(p3)) + tochar(np.argmax(p4))
+        #     loc = str(np.argmax(p5))
 
             # TOOD if confidence > 90%: 
-            if logging:
+        prediction = "XX00"
+        loc = "2"
+        if logging:
+            if self.i % 4 == 0:
                 print("Plate Found: ", prediction)
                 cv2.imwrite('guesses/' + prediction + '_' + loc + '_ ' +
                     str(rospy.get_rostime()) + '.png', plateimg)
-
-            string = self.teamnamepass + "," + loc + "," + prediction
-            self.plate_out.publish(string)
+            self.i += 1
+            # string = self.teamnamepass + "," + loc + "," + prediction
+            # self.plate_out.publish(string)
 
     # function that returns rectangular snippet of an image based on top xy coordinate and 
     def sub_image(self, img, featureloc, scale=1):
@@ -211,11 +215,13 @@ def colormask_contour(img):
     opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel) # denoises the mask
 
     _, contours, h = cv2.findContours(opening, 1, 2)
-    for cnt in contours: 
+    for cnt in contours: # only one contour 
         approx = cv2.approxPolyDP(cnt,0.1*cv2.arcLength(cnt,True),True)
         if len(approx)==4:
             x,y,w,h = cv2.boundingRect(cnt)
             if w > 60 and h > 80 and notEdges(x,y,w,h):
+                # cv2.rectangle(img,(x,y),(x+w,y+h), (0,255,0), 3)
+                # cv2.fillPoly(img, approx.astype('int32'), (0, 255, 0), 3) 
                 return img, approx
 
     return img, None
@@ -263,12 +269,6 @@ def purplemask(img, stripes=False):
 
         return overmask
     return opening
-
-
-
-
-
-
 
 
 
