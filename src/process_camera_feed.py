@@ -29,6 +29,9 @@ import os
 logging = True 
 drawing = False
 
+
+# https://github.com/tensorflow/cleverhans/issues/1117
+# https://github.com/tensorflow/tensorflow/issues/28287
 session = keras.backend.get_session()
 init = tf.global_variables_initializer()
 session.run(init)
@@ -126,7 +129,14 @@ class image_converter:
             p3 = loaded_model.predict(im3)
             p4 = loaded_model.predict(im4)
             p5 = loaded_model.predict(im5)
-            prediction = tochar(np.argmax(p1)) + tochar(np.argmax(p2)) + tochar(np.argmax(p3)) + tochar(np.argmax(p4))
+
+            p1 = p1[0,10:] # restricting guesses to numbers or characters
+            p2 = p2[0,10:]
+            p3 = p3[0,0:10] # note the 10 offset
+            p4 = p4[0,0:10]
+            p5 = p5[0,0:10]
+
+            prediction = tochar(np.argmax(p1) + 10) + tochar(np.argmax(p2) + 10) + tochar(np.argmax(p3)) + tochar(np.argmax(p4))
             loc = str(np.argmax(p5))
 
 
