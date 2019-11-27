@@ -15,19 +15,39 @@ from std_msgs.msg import Int16, String
 
 import tensorflow as tf
 from tensorflow import keras
-# print (keras.version)
-# print (tf.version())
-# # from keras.models import Sequential
-# # from keras.layers import Dense
-# # from keras.models import model_from_json
+
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.models import model_from_json
+
+from tensorflow.python.keras.backend import set_session
+from tensorflow.python.keras.models import load_model
+
 from matplotlib import pyplot as plt
 import os
 
-logging = False 
+logging = True 
 drawing = False
+
+session = keras.backend.get_session()
+init = tf.global_variables_initializer()
+session.run(init)
+
+
+model = "/home/tyler/353_ws/src/license_process/src/model.json"
+weights = "/home/tyler/353_ws/src/license_process/src/model.h5"
+
+json_file = open(model, 'r')
+loaded_model_json = json_file.read()
+json_file.close()
+loaded_model = model_from_json(loaded_model_json)
+loaded_model.load_weights(weights)
+graph = tf.get_default_graph()
+loaded_model._make_predict_function()
+
+loaded_model.compile(optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy'])
 
 class image_converter:
 
@@ -41,8 +61,6 @@ class image_converter:
         self.graph = False
 
         # IO Stuff
-        self.model = "/home/tyler/353_ws/src/license_process/src/model.json"
-        self.weights = "/home/tyler/353_ws/src/license_process/src/model.h5"
         self.im_w = 1280
         self.im_h = 720
         self.teamnamepass = "GG_GoshaKee,passw0rd" # so secure lol hope I don't get hacked
@@ -97,19 +115,12 @@ class image_converter:
         # 3. trial and error (find paper exmaples?) 
         # change model weights and biases, retrain, and import to real model to test. 
 
-        json_file = open(self.model, 'r')
-        loaded_model_json = json_file.read()
-        json_file.close()
-        loaded_model = model_from_json(loaded_model_json)
-        loaded_model.load_weights(self.weights)
-        graph = tf.get_default_graph()
-        loaded_model._make_predict_function()
 
-        loaded_model.compile(optimizer='adam',
-                loss='sparse_categorical_crossentropy',
-                metrics=['accuracy'])
 
+        global sess
+        global graph
         with graph.as_default():
+            set_session(session)
             p1 = loaded_model.predict(im1)
             p2 = loaded_model.predict(im2)
             p3 = loaded_model.predict(im3)
