@@ -37,8 +37,8 @@ init = tf.global_variables_initializer()
 session.run(init)
 
 
-model = "/home/tyler/353_ws/src/license_process/src/model.json"
-weights = "/home/tyler/353_ws/src/license_process/src/model.h5"
+model = "/home/tyler/353_ws/src/license_process/src/model3.json"
+weights = "/home/tyler/353_ws/src/license_process/src/model3.h5"
 
 json_file = open(model, 'r')
 loaded_model_json = json_file.read()
@@ -75,15 +75,15 @@ class image_converter:
         self.plate4 = (290,240)
         self.location = (40,170)
 
-        self.pipe_x = 80
-        self.pipe_y = 160
+        self.pipe_x = 40
+        self.pipe_y = 80
 
         self.border = 50
         self.res_x = 300
         self.res_y = int(self.res_x*1.5)
         self.plate_start = int(self.res_y*0.730) # Far down enough to find the border
 
-        self.buffsize = 1
+        self.buffsize = 2
         self.i = 0
         self.buffer = [self.teamnamepass] * self.buffsize
 
@@ -104,11 +104,11 @@ class image_converter:
             self.image_out.publish( image_message )
 
     def predictplate(self, plateimg):
-        im1 = self.sub_image(plateimg,self.plate1,1) # cropping
-        im2 = self.sub_image(plateimg,self.plate2,1)
-        im3 = self.sub_image(plateimg,self.plate3,1)
-        im4 = self.sub_image(plateimg,self.plate4,1)
-        im5 = self.sub_image(plateimg,self.location,2)
+        im1 = self.sub_image(plateimg,self.plate1,2) # cropping
+        im2 = self.sub_image(plateimg,self.plate2,2)
+        im3 = self.sub_image(plateimg,self.plate3,2)
+        im4 = self.sub_image(plateimg,self.plate4,2)
+        im5 = self.sub_image(plateimg,self.location,4)
 
         # Are now loading the model each time to avoid the multithreading bug
 
