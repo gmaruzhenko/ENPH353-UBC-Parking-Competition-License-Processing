@@ -83,7 +83,9 @@ class image_converter:
         self.res_y = int(self.res_x*1.5)
         self.plate_start = int(self.res_y*0.730) # Far down enough to find the border
 
+        self.buffsize = 1
         self.i = 0
+        self.buffer = [self.teamnamepass] * self.buffsize
 
     def callback(self, data):
         try:
@@ -97,8 +99,9 @@ class image_converter:
             plateimg = self.trim_plate(cv_image, points)
             self.predictplate(plateimg)
 
-        image_message = self.bridge.cv2_to_imgmsg(output, encoding="bgr8") #bgr8 or 8UC1
-        self.image_out.publish( image_message )
+        if logging:
+            image_message = self.bridge.cv2_to_imgmsg(output, encoding="bgr8") #bgr8 or 8UC1
+            self.image_out.publish( image_message )
 
     def predictplate(self, plateimg):
         im1 = self.sub_image(plateimg,self.plate1,1) # cropping
@@ -120,7 +123,6 @@ class image_converter:
 
 
 
-        global sess
         global graph
         with graph.as_default():
             set_session(session)
@@ -136,22 +138,34 @@ class image_converter:
             p4 = p4[0,0:10]
             p5 = p5[0,0:10]
 
+            # decoding weights also notice the offset consideration
             prediction = tochar(np.argmax(p1) + 10) + tochar(np.argmax(p2) + 10) + tochar(np.argmax(p3)) + tochar(np.argmax(p4))
             loc = str(np.argmax(p5))
 
-
         string = self.teamnamepass + "," + loc + "," + prediction
-        self.plate_out.publish(string)
 
         if logging:
             print("Plate Found: " + string)
+        #     string = '/home/tyler/353_ws/guesses/' + prediction + '_' + loc + '_' + str(rospy.get_rostime()) + '.png'
+        #     print("Plate Found: " + string)
+        #     cv2.imwrite(string, plateimg) # data gen
+
+        self.buffer[self.i] = string
+
+        if self.bufferequal():
+            self.plate_out.publish(string)
+            if logging:
+                print("publishing string")
+
+        self.i = (self.i + 1) % self.buffsize
 
 
-            #     if logging:
-            # #if self.i % 1 == 0:
-            #     string = '/home/tyler/353_ws/guesses/' + prediction + '_' + loc + '_' + str(rospy.get_rostime()) + '.png'
-            #     print("Plate Found: " + string)
-            #     cv2.imwrite(string, plateimg)
+
+    def bufferequal(self):
+        for i in range(len(self.buffer)):
+            if self.buffer[0] != self.buffer[i]:
+                return False
+        return True
 
     # function that returns rectangular snippet of an image based on top xy coordinate and 
     def sub_image(self, img, featureloc, scale=1):
