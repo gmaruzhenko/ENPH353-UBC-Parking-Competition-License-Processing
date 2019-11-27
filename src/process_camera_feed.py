@@ -26,7 +26,7 @@ from tensorflow.keras.models import model_from_json
 from matplotlib import pyplot as plt
 import os
 
-logging = True 
+logging = False 
 drawing = False
 
 class image_converter:
@@ -48,14 +48,14 @@ class image_converter:
         self.teamnamepass = "GG_GoshaKee,passw0rd" # so secure lol hope I don't get hacked
 
         # Image Parameter Stuff
-        self.plate1 = (340,40)
-        self.plate2 = (340,90)
-        self.plate3 = (335,180)
-        self.plate4 = (335,240)
-        self.location = (180,180)
+        self.plate1 = (290,25)
+        self.plate2 = (290,75)
+        self.plate3 = (290,180)
+        self.plate4 = (290,240)
+        self.location = (40,170)
 
         self.pipe_x = 80
-        self.pipe_y = 80
+        self.pipe_y = 160
 
         self.border = 50
         self.res_x = 300
@@ -97,37 +97,40 @@ class image_converter:
         # 3. trial and error (find paper exmaples?) 
         # change model weights and biases, retrain, and import to real model to test. 
 
-        # json_file = open(self.model, 'r')
-        # loaded_model_json = json_file.read()
-        # json_file.close()
-        # loaded_model = model_from_json(loaded_model_json)
-        # loaded_model.load_weights(self.weights)
-        # graph = tf.get_default_graph()
-        # loaded_model._make_predict_function()
+        json_file = open(self.model, 'r')
+        loaded_model_json = json_file.read()
+        json_file.close()
+        loaded_model = model_from_json(loaded_model_json)
+        loaded_model.load_weights(self.weights)
+        graph = tf.get_default_graph()
+        loaded_model._make_predict_function()
 
-        # loaded_model.compile(optimizer='adam',
-        #         loss='sparse_categorical_crossentropy',
-        #         metrics=['accuracy'])
+        loaded_model.compile(optimizer='adam',
+                loss='sparse_categorical_crossentropy',
+                metrics=['accuracy'])
 
-        # with graph.as_default():
-        #     p1 = loaded_model.predict(im1)
-        #     p2 = loaded_model.predict(im2)
-        #     p3 = loaded_model.predict(im3)
-        #     p4 = loaded_model.predict(im4)
-        #     p5 = loaded_model.predict(im5)
-        #     prediction = tochar(np.argmax(p1)) + tochar(np.argmax(p2)) + tochar(np.argmax(p3)) + tochar(np.argmax(p4))
-        #     loc = str(np.argmax(p5))
-            # TOOD if confidence > 90%: 
-        prediction = "XX00"
-        loc = "2"
+        with graph.as_default():
+            p1 = loaded_model.predict(im1)
+            p2 = loaded_model.predict(im2)
+            p3 = loaded_model.predict(im3)
+            p4 = loaded_model.predict(im4)
+            p5 = loaded_model.predict(im5)
+            prediction = tochar(np.argmax(p1)) + tochar(np.argmax(p2)) + tochar(np.argmax(p3)) + tochar(np.argmax(p4))
+            loc = str(np.argmax(p5))
+
+
+        string = self.teamnamepass + "," + loc + "," + prediction
+        self.plate_out.publish(string)
+
         if logging:
-            #if self.i % 1 == 0:
-                string = 'guesses/' + prediction + '_' + loc + '_ ' + str(rospy.get_rostime()) + '.png'
-                print("Plate Found: " + string)
-                cv2.imwrite(string, plateimg)
-            #self.i += 1
-            # string = self.teamnamepass + "," + loc + "," + prediction
-            # self.plate_out.publish(string)
+            print("Plate Found: " + string)
+
+
+            #     if logging:
+            # #if self.i % 1 == 0:
+            #     string = '/home/tyler/353_ws/guesses/' + prediction + '_' + loc + '_' + str(rospy.get_rostime()) + '.png'
+            #     print("Plate Found: " + string)
+            #     cv2.imwrite(string, plateimg)
 
     # function that returns rectangular snippet of an image based on top xy coordinate and 
     def sub_image(self, img, featureloc, scale=1):
@@ -213,7 +216,7 @@ def colormask_contour(img):
     kernel = np.ones((2,2),np.uint8)
     opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel) # denoises the mask
 
-    _, contours, h = cv2.findContours(opening, 1, 2)
+    contours, h = cv2.findContours(opening, 1, 2)
     for cnt in contours: # only one contour 
         approx = cv2.approxPolyDP(cnt,0.1*cv2.arcLength(cnt,True),True)
         if len(approx)==4:
@@ -254,7 +257,7 @@ def purplemask(img, stripes=False):
     #Generate the stretch mask around the purple regions s.t. we can only find plates. 
     if stripes:
         overmask = np.zeros(purplemask.shape, np.dtype('uint8'))
-        _, contours, h = cv2.findContours(opening, 1, 2)
+        contours, h = cv2.findContours(opening, 1, 2)
 
         stretchbox = 100
         cutpix = 40 # to get rid of the small bottom part
