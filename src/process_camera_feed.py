@@ -87,6 +87,9 @@ class image_converter:
         self.i = 0
         self.buffer = [self.teamnamepass] * self.buffsize
 
+        string = self.teamnamepass + ",0,AA00"
+        self.plate_out.publish(string)
+
     def callback(self, data):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
